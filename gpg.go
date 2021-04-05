@@ -70,7 +70,7 @@ func processKey(ctx context.Context, key string) (string, mondash.Status) {
 		logger.Debugf("%s %#v", n, id)
 
 		if id.SelfSignature.KeyLifetimeSecs != nil {
-			idSelfSigExpiry := e.PrimaryKey.CreationTime.Add(time.Duration(*id.SelfSignature.KeyLifetimeSecs) * time.Second)
+			idSelfSigExpiry := id.SelfSignature.CreationTime.Add(time.Duration(*id.SelfSignature.KeyLifetimeSecs) * time.Second)
 			logger.WithField("id", n).Debugf("Selfsig: Identity expires: %s", idSelfSigExpiry)
 
 			if s := checkExpiry(idSelfSigExpiry); s != mondash.StatusOK {
