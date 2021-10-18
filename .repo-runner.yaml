@@ -8,5 +8,6 @@ commands:
 
 environment:
   CGO_ENABLED: 0
+  DRAFT: 'false'
   GO111MODULE: on
   MOD_MODE: readonly
