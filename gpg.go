@@ -69,34 +69,30 @@ func processKey(ctx context.Context, key string) (string, mondash.Status) {
 	for n, id := range e.Identities {
 		logger.Debugf("%s %#v", n, id)
 
-		if id.SelfSignature.KeyLifetimeSecs != nil {
-			idSelfSigExpiry := id.SelfSignature.CreationTime.Add(time.Duration(*id.SelfSignature.KeyLifetimeSecs) * time.Second)
-			logger.WithField("id", n).Debugf("Selfsig: Identity expires: %s", idSelfSigExpiry)
-
-			if s := checkExpiry(idSelfSigExpiry); s != mondash.StatusOK {
-				return fmt.Sprintf("Identity self-signature for %q has key-expiry in %dh", n, time.Until(idSelfSigExpiry)/time.Hour), s
-			}
-
-			if expiry == nil || expiry.After(idSelfSigExpiry) {
-				expiry = &idSelfSigExpiry
-			}
-		}
-
+		var idSelfSigExpiry *time.Time
 		for _, sig := range id.Signatures {
-			if sig.KeyLifetimeSecs == nil {
+			if sig.KeyLifetimeSecs == nil || sig.IssuerKeyId != &e.PrimaryKey.KeyId {
 				continue
 			}
 
 			idSigExpiry := e.PrimaryKey.CreationTime.Add(time.Duration(*sig.KeyLifetimeSecs) * time.Second)
 			logger.WithField("id", n).Debugf("Sig: Identity expires: %s", idSigExpiry)
 
-			if s := checkExpiry(idSigExpiry); s != mondash.StatusOK {
-				return fmt.Sprintf("Identity signature for %q has key-expiry in %dh", n, time.Until(idSigExpiry)/time.Hour), s
+			if idSelfSigExpiry == nil || idSigExpiry.After(*idSelfSigExpiry) {
+				idSelfSigExpiry = &idSigExpiry
 			}
+		}
 
-			if expiry == nil || expiry.After(idSigExpiry) {
-				expiry = &idSigExpiry
-			}
+		if idSelfSigExpiry == nil {
+			continue
+		}
+
+		if s := checkExpiry(*idSelfSigExpiry); s != mondash.StatusOK {
+			return fmt.Sprintf("Identity signature for %q has key-expiry in %dh", n, time.Until(*idSelfSigExpiry)/time.Hour), s
+		}
+
+		if expiry == nil || expiry.After(*idSelfSigExpiry) {
+			expiry = idSelfSigExpiry
 		}
 	}
 
