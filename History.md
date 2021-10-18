@@ -1,3 +1,8 @@
+# 0.1.2 / 2021-10-18
+
+  * CI: Do not draft release
+  * Fix: Self-Signature detection is broken, do the detection ourselves
+
 # 0.1.1 / 2021-04-05
 
   * Fix: Looks like a self-signature is valid from its creation
