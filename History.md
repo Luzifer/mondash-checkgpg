@@ -1,3 +1,8 @@
+# 0.2.0 / 2022-03-12
+
+  * Replace deprecated `x/crypto/openpgp` with maintained fork
+  * Add support for http URLs for keys
+
 # 0.1.2 / 2021-10-18
 
   * CI: Do not draft release
