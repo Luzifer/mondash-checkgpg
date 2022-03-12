@@ -1,3 +1,7 @@
+# 0.3.0 / 2022-03-12
+
+  * Skip check for revoked subkeys
+
 # 0.2.0 / 2022-03-12
 
   * Replace deprecated `x/crypto/openpgp` with maintained fork
