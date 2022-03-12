@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -29,15 +30,19 @@ func getKeyFromKeyserver(ctx context.Context, keyID string) (*openpgp.Entity, er
 
 	uri.RawQuery = params.Encode()
 
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, uri.String(), nil)
+	return getKeyFromURL(ctx, uri.String())
+}
+
+func getKeyFromURL(ctx context.Context, keyURL string) (*openpgp.Entity, error) {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, keyURL, nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "execute http request")
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, errors.New("key not found")
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Errorf("http status %d", resp.StatusCode)
 	}
 
 	block, err := armor.Decode(resp.Body)
@@ -53,16 +58,32 @@ func getKeyFromKeyserver(ctx context.Context, keyID string) (*openpgp.Entity, er
 	return ent, nil
 }
 
-func processKey(ctx context.Context, key string) (string, mondash.Status) {
-	logger := log.WithField("key", key)
+func processKey(ctx context.Context, key string) (keyID, message string, status mondash.Status) {
+	var (
+		e      *openpgp.Entity
+		err    error
+		logger = log.WithField("key", key)
+	)
 
-	e, err := getKeyFromKeyserver(ctx, key)
-	if err != nil {
-		return "Key retrieval failed", mondash.StatusUnknown
+	switch {
+	case strings.HasPrefix(key, "0x"):
+		if e, err = getKeyFromKeyserver(ctx, key); err != nil {
+			return "", "Key retrieval failed", mondash.StatusUnknown
+		}
+
+	case strings.HasPrefix(key, "http"):
+		if e, err = getKeyFromURL(ctx, key); err != nil {
+			return "", "Key retrieval failed: " + err.Error(), mondash.StatusUnknown
+		}
+
+	default:
+		return "", "Unexpected key source", mondash.StatusUnknown
 	}
 
+	keyID = fmt.Sprintf("0x%016X", e.PrimaryKey.KeyId)
+
 	if l := len(e.Revocations); l > 0 {
-		return fmt.Sprintf("Key has %d revocation signature(s)", l), mondash.StatusCritical
+		return keyID, fmt.Sprintf("Key has %d revocation signature(s)", l), mondash.StatusCritical
 	}
 
 	var expiry *time.Time
@@ -88,7 +109,7 @@ func processKey(ctx context.Context, key string) (string, mondash.Status) {
 		}
 
 		if s := checkExpiry(*idSelfSigExpiry); s != mondash.StatusOK {
-			return fmt.Sprintf("Identity signature for %q has key-expiry in %dh", n, time.Until(*idSelfSigExpiry)/time.Hour), s
+			return keyID, fmt.Sprintf("Identity signature for %q has key-expiry in %dh", n, time.Until(*idSelfSigExpiry)/time.Hour), s
 		}
 
 		if expiry == nil || expiry.After(*idSelfSigExpiry) {
@@ -105,7 +126,7 @@ func processKey(ctx context.Context, key string) (string, mondash.Status) {
 		logger.Debugf("Subkey signature expires: %s", skExp)
 
 		if s := checkExpiry(skExp); s != mondash.StatusOK {
-			return fmt.Sprintf("Subkey signature has key-expiry in %dh", time.Until(skExp)/time.Hour), s
+			return keyID, fmt.Sprintf("Subkey signature has key-expiry in %dh", time.Until(skExp)/time.Hour), s
 		}
 
 		if expiry == nil || expiry.After(skExp) {
@@ -114,10 +135,10 @@ func processKey(ctx context.Context, key string) (string, mondash.Status) {
 	}
 
 	if expiry != nil {
-		return fmt.Sprintf("Key looks good (expires in %dh)", time.Until(*expiry)/time.Hour), mondash.StatusOK
+		return keyID, fmt.Sprintf("Key looks good (expires in %dh)", time.Until(*expiry)/time.Hour), mondash.StatusOK
 	}
 
-	return "Key looks good (does not expire)", mondash.StatusOK
+	return keyID, "Key looks good (does not expire)", mondash.StatusOK
 }
 
 func checkExpiry(ex time.Time) mondash.Status {

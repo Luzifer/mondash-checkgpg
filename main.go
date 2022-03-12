@@ -56,10 +56,10 @@ func main() {
 	)
 
 	for _, key := range cfg.Keys {
-		msg, state := processKey(context.Background(), key)
+		keyID, msg, state := processKey(context.Background(), key)
 		overallStatus = calcStatus(overallStatus, state)
-		statusMessages = append(statusMessages, fmt.Sprintf("0x%s: %s",
-			key[len(key)-8:],
+		statusMessages = append(statusMessages, fmt.Sprintf("%s: %s",
+			keyID,
 			msg,
 		))
 	}
