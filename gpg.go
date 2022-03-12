@@ -119,6 +119,12 @@ func processKey(ctx context.Context, key string) (keyID, message string, status 
 
 	for _, sk := range e.Subkeys {
 		if sk.Sig.KeyLifetimeSecs == nil {
+			// No lifetime assigned to that signature: Ignore that key
+			continue
+		}
+
+		if sk.Revoked(time.Now()) {
+			// Subkey has been revoked, we don't check that one
 			continue
 		}
 
